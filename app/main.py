@@ -36,3 +36,11 @@ app.include_router(sync_router)
 @app.get("/")
 async def health():
     return {"status": "ok", "service": "vitimeasure-api"}
+
+
+@app.post("/api/init-db")
+async def init_db():
+    """One-time endpoint to create tables. Call once after deploy."""
+    from app.database import create_tables
+    await create_tables()
+    return {"status": "tables created"}

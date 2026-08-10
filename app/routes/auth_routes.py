@@ -3,13 +3,17 @@ Auth routes: register, login, delete account.
 """
 
 import uuid
+from datetime import datetime, timezone
 
-from azure.cosmos.exceptions import CosmosResourceNotFoundError
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import create_token, hash_password, require_auth, verify_password
-from app.database import get_container
+from app.database import (
+    CheckIn, DailyStress, Patch, Scan, Treatment, User, get_db,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -25,85 +29,52 @@ class LoginBody(BaseModel):
     password: str
 
 
-# ─── Register ────────────────────────────────────────────────────────────────
-
 @router.post("/register")
-async def register(body: RegisterBody):
-    container = get_container("users")
+async def register(body: RegisterBody, db: AsyncSession = Depends(get_db)):
     email = body.email.strip().lower()
 
-    # Check if email already exists
-    query = "SELECT * FROM c WHERE c.email = @email"
-    params = [{"name": "@email", "value": email}]
-    existing = list(container.query_items(query, parameters=params, enable_cross_partition_query=True))
-    if existing:
+    result = await db.execute(select(User).where(User.email == email))
+    if result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use")
 
     user_id = str(uuid.uuid4())
-    user_doc = {
-        "id": user_id,
-        "email": email,
-        "passwordHash": hash_password(body.password),
-        "name": body.name.strip() or email.split("@")[0],
-        "createdAt": _now_iso(),
-    }
-    container.create_item(user_doc)
+    user = User(
+        id=user_id,
+        email=email,
+        password_hash=hash_password(body.password),
+        name=body.name.strip() or email.split("@")[0],
+    )
+    db.add(user)
+    await db.commit()
 
     token = create_token(user_id, email)
     return {"token": token, "userId": user_id}
 
 
-# ─── Login ───────────────────────────────────────────────────────────────────
-
 @router.post("/login")
-async def login(body: LoginBody):
-    container = get_container("users")
+async def login(body: LoginBody, db: AsyncSession = Depends(get_db)):
     email = body.email.strip().lower()
 
-    query = "SELECT * FROM c WHERE c.email = @email"
-    params = [{"name": "@email", "value": email}]
-    results = list(container.query_items(query, parameters=params, enable_cross_partition_query=True))
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
 
-    if not results:
+    if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    user = results[0]
-    if not verify_password(body.password, user["passwordHash"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    token = create_token(user.id, email)
+    return {"token": token, "userId": user.id}
 
-    token = create_token(user["id"], email)
-    return {"token": token, "userId": user["id"]}
-
-
-# ─── Delete account ──────────────────────────────────────────────────────────
 
 @router.delete("/account")
-async def delete_account(payload: dict = Depends(require_auth)):
+async def delete_account(
+    payload: dict = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
     user_id = payload["userId"]
-    email = payload["email"]
 
-    # Delete user document
-    users = get_container("users")
-    try:
-        users.delete_item(item=user_id, partition_key=email)
-    except CosmosResourceNotFoundError:
-        pass
-
-    # Delete all user data from every container
-    for container_name in ["scans", "patches", "check_ins", "daily_stress", "treatments"]:
-        container = get_container(container_name)
-        query = "SELECT c.id FROM c WHERE c.userId = @uid"
-        params = [{"name": "@uid", "value": user_id}]
-        items = list(container.query_items(query, parameters=params, enable_cross_partition_query=True))
-        for item in items:
-            try:
-                container.delete_item(item=item["id"], partition_key=user_id)
-            except CosmosResourceNotFoundError:
-                pass
+    for model in [Scan, Patch, CheckIn, DailyStress, Treatment]:
+        await db.execute(delete(model).where(model.user_id == user_id))
+    await db.execute(delete(User).where(User.id == user_id))
+    await db.commit()
 
     return {"deleted": True}
-
-
-def _now_iso() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat()

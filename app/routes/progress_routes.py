@@ -2,10 +2,14 @@
 Progress route — returns scan history for a user + body location.
 """
 
+import json
+
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import require_auth
-from app.database import get_container
+from app.database import Scan, get_db
 
 router = APIRouter(prefix="/api", tags=["progress"])
 
@@ -15,31 +19,28 @@ async def get_progress(
     userId: str = Query(...),
     bodyLocation: str = Query(...),
     _auth: dict = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
 ):
-    container = get_container("scans")
-    query = (
-        "SELECT * FROM c WHERE c.userId = @uid AND c.bodyLocation = @loc "
-        "ORDER BY c.scanDate ASC"
+    result = await db.execute(
+        select(Scan)
+        .where(Scan.user_id == userId, Scan.body_location == bodyLocation)
+        .order_by(Scan.scan_date.asc())
     )
-    params = [
-        {"name": "@uid", "value": userId},
-        {"name": "@loc", "value": bodyLocation},
-    ]
-    items = list(container.query_items(query, parameters=params, enable_cross_partition_query=True))
+    scans = result.scalars().all()
 
     return [
         {
-            "id": item["id"],
-            "userId": item["userId"],
-            "bodyLocation": item["bodyLocation"],
-            "scanDate": item["scanDate"],
-            "affectedPercent": item.get("affectedPercent", 0),
-            "unaffectedPercent": item.get("unaffectedPercent", 100),
-            "imageUrl": item.get("imageUrl", ""),
-            "boundingBoxes": item.get("boundingBoxes", []),
-            "dominantColor": item.get("dominantColor", "#FFFFFF"),
-            "accentColor": item.get("accentColor", "#4F46E5"),
-            "vasiScore": item.get("vasiScore"),
+            "id": s.id,
+            "userId": s.user_id,
+            "bodyLocation": s.body_location,
+            "scanDate": s.scan_date,
+            "affectedPercent": s.affected_percent,
+            "unaffectedPercent": s.unaffected_percent,
+            "imageUrl": s.image_url,
+            "boundingBoxes": json.loads(s.bounding_boxes) if s.bounding_boxes else [],
+            "dominantColor": s.dominant_color,
+            "accentColor": s.accent_color,
+            "vasiScore": s.vasi_score,
         }
-        for item in items
+        for s in scans
     ]
