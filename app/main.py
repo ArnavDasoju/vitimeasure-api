@@ -35,12 +35,18 @@ app.include_router(sync_router)
 
 @app.get("/")
 async def health():
-    return {"status": "ok", "service": "vitimeasure-api"}
+    from app.config import settings
+    db_set = bool(settings.database_url)
+    db_host = settings.database_url.split("@")[1].split("/")[0] if "@" in settings.database_url else "not set"
+    return {"status": "ok", "service": "vitimeasure-api", "db_configured": db_set, "db_host": db_host}
 
 
 @app.post("/api/init-db")
 async def init_db():
     """One-time endpoint to create tables. Call once after deploy."""
-    from app.database import create_tables
-    await create_tables()
-    return {"status": "tables created"}
+    try:
+        from app.database import create_tables
+        await create_tables()
+        return {"status": "tables created"}
+    except Exception as e:
+        return {"error": str(e)}
