@@ -16,7 +16,6 @@ from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
 
 # Supabase requires SSL. For asyncpg, pass an SSLContext.
-import ssl as _ssl
 _connect_args: dict = {}
 if "supabase" in settings.database_url or "pooler" in settings.database_url:
     _ctx = _ssl.create_default_context()

@@ -244,11 +244,25 @@ class TreatmentItemIn(BaseModel):
     userId: str
     patchId: str = ""
     bodyLocation: str = ""
+    # Mobile app sends medicationName/dose; accept both naming conventions
     name: str = ""
+    medicationName: str = ""
     dosage: str = ""
+    dose: str = ""
     startDate: str = ""
     endDate: str | None = None
     notes: str = ""
+    createdAt: str = ""
+    updatedAt: str = ""
+    isActive: bool = True
+
+    @property
+    def resolved_name(self) -> str:
+        return self.medicationName or self.name
+
+    @property
+    def resolved_dosage(self) -> str:
+        return self.dose or self.dosage
 
 
 class TreatmentSyncBody(BaseModel):
@@ -260,13 +274,13 @@ async def sync_treatments(body: TreatmentSyncBody, auth: dict = Depends(require_
     for t in body.treatments:
         existing = await db.get(Treatment, t.id)
         if existing:
-            existing.name = t.name
-            existing.dosage = t.dosage
+            existing.name = t.resolved_name
+            existing.dosage = t.resolved_dosage
             existing.synced_at = _now_iso()
         else:
             db.add(Treatment(
                 id=t.id, user_id=t.userId, patch_id=t.patchId,
-                body_location=t.bodyLocation, name=t.name, dosage=t.dosage,
+                body_location=t.bodyLocation, name=t.resolved_name, dosage=t.resolved_dosage,
                 start_date=t.startDate, end_date=t.endDate,
                 notes=t.notes, synced_at=_now_iso(),
             ))

@@ -5,7 +5,7 @@ Backend for the VITImeasure mobile app. Handles authentication, vitiligo image a
 ## Prerequisites
 
 - Python 3.11+
-- Azure Cosmos DB account
+- Supabase account (free tier PostgreSQL)
 - OpenAI API key (optional, for AI chat/insights)
 
 ## Setup
@@ -17,7 +17,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Fill in COSMOS_DB_CONNECTION_STRING, JWT_SECRET, and optionally OPENAI_API_KEY
+# Fill in DATABASE_URL, JWT_SECRET, and optionally OPENAI_API_KEY
 ```
 
 ## Run locally
@@ -26,28 +26,15 @@ cp .env.example .env
 uvicorn app.main:app --reload --port 3000
 ```
 
-## Deploy to Azure App Service
+Then call `POST /api/init-db` once to create tables.
 
-```bash
-# Login and create resources
-az login
-az group create --name vitimeasure-rg --location eastus2
-az appservice plan create --name vitimeasure-plan --resource-group vitimeasure-rg --sku B1 --is-linux
-az webapp create --name vitimeasure-api --resource-group vitimeasure-rg --plan vitimeasure-plan --runtime "PYTHON:3.11"
+## Deploy to Render
 
-# Set environment variables
-az webapp config appsettings set --name vitimeasure-api --resource-group vitimeasure-rg --settings \
-  COSMOS_DB_CONNECTION_STRING="<your-connection-string>" \
-  COSMOS_DB_DATABASE_NAME="vitiligo_db" \
-  JWT_SECRET="<random-64-char-string>" \
-  OPENAI_API_KEY="<your-key>"
+The repo includes `render.yaml` for auto-configuration. Push to GitHub, connect to Render, and set environment variables:
 
-# Set startup command
-az webapp config set --name vitimeasure-api --resource-group vitimeasure-rg --startup-file "startup.sh"
-
-# Deploy
-az webapp up --name vitimeasure-api --resource-group vitimeasure-rg --runtime "PYTHON:3.11"
-```
+- `DATABASE_URL` — Supabase session pooler connection string
+- `JWT_SECRET` — random 64-character string
+- `OPENAI_API_KEY` — optional
 
 ## API Endpoints
 
@@ -62,6 +49,9 @@ az webapp up --name vitimeasure-api --resource-group vitimeasure-rg --runtime "P
 | POST | `/api/askAI` | AI chat about scan data |
 | POST | `/api/generateInsights` | AI trend insights |
 | POST | `/api/sync/patches` | Sync patches |
+| GET | `/api/sync/patches` | Get user's patches |
+| POST | `/api/sync/scans` | Sync scans |
+| GET | `/api/sync/scans/:patchId` | Get scans for a patch |
 | POST | `/api/sync/checkins` | Sync weekly check-ins |
 | POST | `/api/sync/daily-stress` | Sync daily stress entries |
 | POST | `/api/sync/treatments` | Sync treatment logs |

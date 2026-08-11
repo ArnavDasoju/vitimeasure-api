@@ -28,7 +28,10 @@ class ScanEntry(BaseModel):
 async def ask_ai_route(body: AskAIBody, _auth: dict = Depends(require_auth)):
     if not settings.openai_api_key:
         raise HTTPException(status_code=503, detail="AI features are not configured")
-    answer = await ask_ai(body.question, body.context, body.conversationHistory)
+    try:
+        answer = await ask_ai(body.question, body.context, body.conversationHistory)
+    except Exception:
+        return {"answer": "Sorry, I couldn't process your question right now. Please try again."}
     return {"answer": answer}
 
 
@@ -36,5 +39,8 @@ async def ask_ai_route(body: AskAIBody, _auth: dict = Depends(require_auth)):
 async def generate_insights_route(scans: list[ScanEntry], _auth: dict = Depends(require_auth)):
     if not settings.openai_api_key:
         raise HTTPException(status_code=503, detail="AI features are not configured")
-    insight = await generate_insights([s.model_dump() for s in scans])
+    try:
+        insight = await generate_insights([s.model_dump() for s in scans])
+    except Exception:
+        return {"insight": ""}
     return {"insight": insight}

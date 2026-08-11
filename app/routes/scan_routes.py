@@ -7,7 +7,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import require_auth
@@ -16,17 +16,33 @@ from app.services.vitiligo_analyzer import analyse_image
 
 router = APIRouter(prefix="/api", tags=["scan"])
 
+MAX_IMAGE_SIZE = 20 * 1024 * 1024  # 20 MB
+
 
 @router.post("/analyzeScan")
 async def analyze_scan(
     image: UploadFile = File(...),
     userId: str = Form(...),
     bodyLocation: str = Form(...),
-    _auth: dict = Depends(require_auth),
+    auth: dict = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
+    # Validate userId matches authenticated user
+    if auth["userId"] != userId:
+        raise HTTPException(status_code=403, detail="Cannot create scans for another user")
+
     image_bytes = await image.read()
-    result = analyse_image(image_bytes)
+
+    if len(image_bytes) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=413, detail="Image too large (max 20 MB)")
+
+    if not image.content_type or not image.content_type.startswith("image/"):
+        raise HTTPException(status_code=422, detail="File must be an image (JPEG or PNG)")
+
+    try:
+        result = analyse_image(image_bytes)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Could not process image. Please try a different photo.")
 
     scan_id = str(uuid.uuid4())
     scan_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
