@@ -49,4 +49,5 @@ async def init_db():
         await create_tables()
         return {"status": "tables created"}
     except Exception as e:
-        return {"error": str(e)}
+        import traceback
+        return {"error": str(e), "trace": traceback.format_exc()}
