@@ -15,13 +15,9 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 
-_ssl_ctx: _ssl.SSLContext | None = None
-if "supabase" in settings.database_url:
-    _ssl_ctx = _ssl.create_default_context()
-    _ssl_ctx.check_hostname = False
-    _ssl_ctx.verify_mode = _ssl.CERT_NONE
-
-_connect_args = {"ssl": _ssl_ctx} if _ssl_ctx else {}
+# Supabase requires SSL. asyncpg accepts ssl=True for simple verification
+# or an SSLContext for custom settings. "True" works on all platforms.
+_connect_args = {"ssl": "require"} if "supabase" in settings.database_url else {}
 
 # Engine and session are created once — they are safe to reuse across requests.
 # The engine lazily creates connections, so this does not connect at import time.
