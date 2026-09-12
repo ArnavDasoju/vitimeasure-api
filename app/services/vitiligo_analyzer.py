@@ -1,10 +1,14 @@
 """
-Vitiligo image analyser — production-grade OpenCV pipeline.
+Vitiligo image analyser — OpenCV segmentation pipeline.
 
-Designed for clinical-level accuracy across all skin tones (Fitzpatrick I–VI)
-and all vitiligo presentations (focal, segmental, generalized, universal,
-trichrome). Robust against hair follicles, body hair, specular highlights,
-uneven lighting, shadows, and image noise.
+Built to handle skin tones across Fitzpatrick I-VI and the common vitiligo
+presentations (focal, segmental, generalized, universal, trichrome), with
+preprocessing for hair follicles, body hair, specular highlights, uneven
+lighting, shadows, and image noise.
+
+Tuned and spot-checked against a hand-collected sample set. It has not been
+validated against a labelled clinical dataset, and it is not a diagnostic
+tool — output is a coverage measurement, not a medical assessment.
 
 Pipeline:
   1. Decode + resize
